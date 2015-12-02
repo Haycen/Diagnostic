@@ -8,7 +8,7 @@ library(dplyr)
 library(ggplot2)
 
 ## Load dataset
-df <- read.csv("datasets/dataset_3.csv")
+df <- read.csv("datasets/dataset_1.csv")
 
 ########################################################################
 ############ Issues to consider before fitting a model #################

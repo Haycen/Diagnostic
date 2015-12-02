@@ -68,6 +68,32 @@ outlierTest(mod_lm) # Bonferonni p-value for most extreme obs
 leveragePlots(mod_lm) # leverage plots
 plot(mod_lm) # display diagnostic plot for an lm object
 
+#### Test for outliers
+mod_lm  <- lm(Phenotype ~ 1 + X1, data = df)
+outlierTest(mod_lm) # Bonferonni p-value for most extreme obs
+
+par(mfrow=c(1,2))
+leveragePlots(mod_lm) # leverage plots
+plot(Phenotype ~1 + X1, data=df)
+abline(mod_lm, col="red")
+
+par(mfrow=c(2,2))
+plot(mod_lm) # display diagnostic plot for an lm object
+
+
+# Leverage tets (Laszlo)
+lev = hat(model.matrix(mod_lm))
+max(stats:::influence(mod_lm)$hat)
+level1=2*(length(coefficients(mod_lm))+1)/length(residuals(mod_lm)) #laverage should be smaller than this
+level2=3*(length(coefficients(mod_lm))+1)/length(residuals(mod_lm)) #or this
+
+par(mfrow=c(1,2))
+plot(lev, ylim=c(0, level2))
+abline(h=level1, col="red", lty=2, lwd=1)
+abline(h=level2, col="red", lty=1, lwd=2)
+cutoff <- 4/((nrow(df)-length(mod_lm$coefficients)-2))
+plot(mod_lm, which=4, cook.levels=cutoff)
+
 #### Influencial points (using influenceME package)
 library(influence.ME)
 
@@ -161,6 +187,8 @@ mySumm <- function(.) {
 		sigma = sigma(.)^2                          # residual variance
 	)
 }
+
+boo01 <- bootMer(mod, mySumm, nsim = 100, .progress = "txt", seed=101)
 
 ## intercept (fixed effect)
 fixef(mod)["(Intercept)"]

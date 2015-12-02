@@ -8,7 +8,7 @@ library(dplyr)
 library(ggplot2)
 
 ## Load dataset
-df <- read.csv("datasets/dataset_1.csv")
+df <- read.csv("datasets/dataset_8.csv")
 
 ########################################################################
 ############ Issues to consider before fitting a model #################
@@ -24,7 +24,14 @@ t.test(X1~missing, df)
 boxplot(X1~missing, df)
 
 #### Collinearity between the model predictors
+
+# Correlation between two predictors
 with(df,cor(X1, X2))
+
+# VIF
+df   <- df[!is.na(df$Phenotype),] # Remore rows with missing values
+mod <- lmer(Phenotype ~ 1 + X1 + X2 + X1X2 + (X1|Individual), data = df)
+vif.mer(mod)
 
 ########################################################################
 ########################### Fit the model ##############################

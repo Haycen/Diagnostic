@@ -4,7 +4,6 @@ library(lme4)
 library(car)
 library(lattice)
 library(arm)
-library(dplyr)
 library(ggplot2)
 
 ## Load dataset
@@ -17,71 +16,56 @@ df <- read.csv("datasets/dataset_1.csv")
 #### Data distribution
 distribution.plot(df$Phenotype)
 
+
+#################################################################################################
 #### Check for missing data
 df$missing <- ifelse(is.na(df$Phenotype), TRUE, FALSE)
+
 # test if predictors of missing data are different from the not missing data
 t.test(X1~missing, df)
 boxplot(X1~missing, df)
 
-#### Collinearity between the model predictors
 
-# Correlation between two predictors
-with(df,cor(X1, X2))
+#################################################################################################
+#### OUTLIERS
 
-# VIF
-df   <- df[!is.na(df$Phenotype),] # Remore rows with missing values
-mod  <- lmer(Phenotype ~ 1 + X1 + X2 + X1X2 + (X1|Individual), data = df)
-vif.mer(mod)
+# Response variable
+par(mfrow = c(2, 2))
+# Response variable
+boxplot(df$Phenotype, ylab = "Phenotype", main = "Boxplot")
+dotchart(df$Phenotype,
+				 ylab = "Order of observations",
+				 xlab = "Phenotype", main = "Cleveland dotplot")
+boxplot(df$Phenotype~df$Individual, ylab = "X1", xlab = "Individual", main = "Boxplot")
+dotchart(df$Phenotype,
+				 groups = factor(df$Individual),
+				 ylab = "Individual", xlab = "Phenotype",
+				 main = "Cleveland dotplot", pch = df$Individual)
 
-########################################################################
-########################### Fit the model ##############################
-########################################################################
-df   <- df[!is.na(df$Phenotype),] # Remore rows with missing values
 
-# fit mixed-effect model
-mod  <- lmer(Phenotype ~ 1 + X1 + (X1|Individual), data = df)
+# Explanatory variable
+par(mfrow = c(2, 2))
+# Explanatory variable
+boxplot(df$X1, ylab = "X1", main = "Boxplot")
+dotchart(df$X1, ylab = "Order of observations", xlab = "X1", main = "Cleveland dotplot")
+boxplot(df$X1~df$Individual, ylab = "X1", xlab = "Individual", main = "Boxplot")
+dotchart(df$X1,
+				 groups = factor(df$Individual),
+				 ylab = "Individual", xlab = "X1",
+				 main = "Cleveland dotplot", pch = df$Individual)
 
-summary(mod)
 
-#### examining residuals #### 
-# centered around 0
-# normality 
-# homogeneity of variance
-diagnostics.plot(mod, df)
 
-# Check for residual pattern within individuals and difference between individuals      
-lattice::xyplot(residuals(mod) ~ fitted(mod) | df$Individual,
-			 main = "Residual pattern within Individuals",
-			 panel=function(x, y){ 
-			 	panel.xyplot(x, y) 
-			 	panel.loess(x, y, span = 0.75) 
-			 	panel.lmline(x, y, lty = 2)  # Least squares broken line
-			 } 
-)
+par(mfrow=c(1,1))
+mod_lm  <- lm(Phenotype ~ X1, data = df)
 
-### Check for autocorrelation in the residuals (independency)
-acf(residuals(mod))
-
-#### Test for outliers
-mod_lm  <- lm(Phenotype ~ 1 + X1, data = df)
-outlierTest(mod_lm) # Bonferonni p-value for most extreme obs
-leveragePlots(mod_lm) # leverage plots
-plot(mod_lm) # display diagnostic plot for an lm object
-
-#### Test for outliers
-mod_lm  <- lm(Phenotype ~ 1 + X1, data = df)
-outlierTest(mod_lm) # Bonferonni p-value for most extreme obs
-
-par(mfrow=c(1,2))
-leveragePlots(mod_lm) # leverage plots
-plot(Phenotype ~1 + X1, data=df)
-abline(mod_lm, col="red")
-
-par(mfrow=c(2,2))
+car::leveragePlots(mod_lm) # leverage plots
+car::outlierTest(mod_lm) # Bonferonni p-value for most extreme obs
+car::influencePlot(mod_lm)
 plot(mod_lm) # display diagnostic plot for an lm object
 
 
-# Leverage tets (Laszlo)
+# Leverage tests (Laszlo)
 lev = hat(model.matrix(mod_lm))
 max(stats:::influence(mod_lm)$hat)
 level1=2*(length(coefficients(mod_lm))+1)/length(residuals(mod_lm)) #laverage should be smaller than this
@@ -93,6 +77,7 @@ abline(h=level1, col="red", lty=2, lwd=1)
 abline(h=level2, col="red", lty=1, lwd=2)
 cutoff <- 4/((nrow(df)-length(mod_lm$coefficients)-2))
 plot(mod_lm, which=4, cook.levels=cutoff)
+
 
 #### Influencial points (using influenceME package)
 library(influence.ME)
@@ -160,6 +145,72 @@ ggplot(data=DBfit, aes(x=X1, y=fitted, color = as.factor(rank))) +
 	geom_point() + 
 	stat_smooth(method = "lm", alpha = 0) + 
 	theme(legend.position="none")
+
+
+#################################################################################################
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### Collinearity between the model predictors
+
+# Correlation between two predictors
+with(df,cor(X1, X2))
+
+# VIF
+df   <- df[!is.na(df$Phenotype),] # Remore rows with missing values
+mod  <- lmer(Phenotype ~ 1 + X1 + X2 + X1X2 + (X1|Individual), data = df)
+vif.mer(mod)
+
+########################################################################
+########################### Fit the model ##############################
+########################################################################
+df   <- df[!is.na(df$Phenotype),] # Remore rows with missing values
+
+# fit mixed-effect model
+mod  <- lmer(Phenotype ~ 1 + X1 + (X1|Individual), data = df)
+
+summary(mod)
+
+#### examining residuals #### 
+# centered around 0
+# normality 
+# homogeneity of variance
+diagnostics.plot(mod, df)
+
+# Check for residual pattern within individuals and difference between individuals      
+lattice::xyplot(residuals(mod) ~ fitted(mod) | df$Individual,
+			 main = "Residual pattern within Individuals",
+			 panel=function(x, y){ 
+			 	panel.xyplot(x, y) 
+			 	panel.loess(x, y, span = 0.75) 
+			 	panel.lmline(x, y, lty = 2)  # Least squares broken line
+			 } 
+)
+
+### Check for autocorrelation in the residuals (independency)
+acf(residuals(mod))
+
+#### Test for outliers
+mod_lm  <- lm(Phenotype ~ 1 + X1, data = df)
+outlierTest(mod_lm) # Bonferonni p-value for most extreme obs
+leveragePlots(mod_lm) # leverage plots
+plot(mod_lm) # display diagnostic plot for an lm object
+
+
 
 ########################################################################
 ################### Extract estimated parameters #######################

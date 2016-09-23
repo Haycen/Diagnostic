@@ -25,6 +25,61 @@ df$missing <- ifelse(is.na(df$Phenotype), TRUE, FALSE)
 t.test(X1~missing, df)
 boxplot(X1~missing, df)
 
+library(HLMdiag)
+
+mod  <- lme4::lmer(Phenotype ~ 1 + X1 + (X1 | Individual), data = df)
+
+
+resid1_fm1 <- HLMresid(mod, level = 1, type = "LS", standardize = TRUE)
+
+qplot(x =  fitted, y = LS.resid, data = resid1_fm1, geom = c("point", "smooth")) + 
+	ylab("LS level-1 residuals")
+qplot(x =  X1, y = LS.resid, data = resid1_fm1, geom = c("point", "smooth")) + 
+	ylab("LS level-1 residuals")
+
+
+resid1_fm2 <- HLMresid(mod, level = 1, type = "LS", standardize = "semi")
+
+qplot(x =  X1, y = semi.std.resid, data = resid1_fm2) + 
+	geom_smooth(method = "lm") + 
+	ylab("semi-standardized residuals") + xlab("X1")
+
+
+ssresid <- na.omit(resid1_fm2$semi.std.resid)
+ggplot_qqnorm(x = ssresid, line = "rlm")
+
+
+resid2_fm3 <- HLMresid(object = mod, level = "Individual")
+ggplot_qqnorm(x = resid2_fm3$'(Intercept)', line = "rlm")
+ggplot_qqnorm(x = resid2_fm3$X1, line = "rlm")
+
+
+
+cooksd_fm4 <- cooks.distance(mod, group = NULL)
+dotplot_diag(x = cooksd_fm4, cutoff = "internal", name = "cooks.distance") + 
+	ylab("Cook's distance") + xlab("school")
+
+cooksd_fm4 <- cooks.distance(mod, group = "Individual")
+dotplot_diag(x = cooksd_fm4, cutoff = "internal", name = "cooks.distance") + 
+	ylab("Cook's distance") + xlab("school")
+
+
+
+rvc_fm4 <- rvc(mod, group = "Individual")
+dotplot_diag(x = rvc_fm4[,1], cutoff = "internal", 
+						 name = "rvc", modify = "dotplot") + 
+						ylab("Relative variance change") + xlab("Individual")
+
+
+
+leverage_fm4 <- leverage(mod, level = "Individual")
+
+
+
+# Subject level deletion and diagnostics
+subject.del  <- case_delete(model = mod, group = "Individual", type = "both")
+subject.diag <- diagnostics(subject.del)
+
 
 #################################################################################################
 #### OUTLIERS

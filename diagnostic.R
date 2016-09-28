@@ -1,269 +1,291 @@
 # load packages and functions
-source("diagnostic_fcns.r")
-library(lme4)
-library(car)
-library(lattice)
-library(arm)
+# source("diagnostic_fcns.r")
+# library(lme4)
+# library(car)
+# library(lattice)
+# library(arm)
 library(ggplot2)
 
 ## Load dataset
-df <- read.csv("datasets/dataset_1.csv")
+df <- read.csv("datasets/dataset_5.csv")
+
+head(df)
+str(df)
+
+df$Individual <- as.factor(df$Individual)
 
 ########################################################################
 ############ Issues to consider before fitting a model #################
 ########################################################################
 
 #### Data distribution
-distribution.plot(df$Phenotype)
-
-
-#################################################################################################
-#### Check for missing data
-df$missing <- ifelse(is.na(df$Phenotype), TRUE, FALSE)
-
-# test if predictors of missing data are different from the not missing data
-t.test(X1~missing, df)
-boxplot(X1~missing, df)
-
-library(HLMdiag)
-
-mod  <- lme4::lmer(Phenotype ~ 1 + X1 + (X1 | Individual), data = df)
-
-
-resid1_fm1 <- HLMresid(mod, level = 1, type = "LS", standardize = TRUE)
-
-qplot(x =  fitted, y = LS.resid, data = resid1_fm1, geom = c("point", "smooth")) + 
-	ylab("LS level-1 residuals")
-qplot(x =  X1, y = LS.resid, data = resid1_fm1, geom = c("point", "smooth")) + 
-	ylab("LS level-1 residuals")
-
-
-resid1_fm2 <- HLMresid(mod, level = 1, type = "LS", standardize = "semi")
-
-qplot(x =  X1, y = semi.std.resid, data = resid1_fm2) + 
-	geom_smooth(method = "lm") + 
-	ylab("semi-standardized residuals") + xlab("X1")
-
-
-ssresid <- na.omit(resid1_fm2$semi.std.resid)
-ggplot_qqnorm(x = ssresid, line = "rlm")
-
-
-resid2_fm3 <- HLMresid(object = mod, level = "Individual")
-ggplot_qqnorm(x = resid2_fm3$'(Intercept)', line = "rlm")
-ggplot_qqnorm(x = resid2_fm3$X1, line = "rlm")
-
-
-
-cooksd_fm4 <- cooks.distance(mod, group = NULL)
-dotplot_diag(x = cooksd_fm4, cutoff = "internal", name = "cooks.distance") + 
-	ylab("Cook's distance") + xlab("school")
-
-cooksd_fm4 <- cooks.distance(mod, group = "Individual")
-dotplot_diag(x = cooksd_fm4, cutoff = "internal", name = "cooks.distance") + 
-	ylab("Cook's distance") + xlab("school")
-
-
-
-rvc_fm4 <- rvc(mod, group = "Individual")
-dotplot_diag(x = rvc_fm4[,1], cutoff = "internal", 
-						 name = "rvc", modify = "dotplot") + 
-						ylab("Relative variance change") + xlab("Individual")
-
-
-
-leverage_fm4 <- leverage(mod, level = "Individual")
-
-
-
-# Subject level deletion and diagnostics
-subject.del  <- case_delete(model = mod, group = "Individual", type = "both")
-subject.diag <- diagnostics(subject.del)
-
-
-#################################################################################################
-#### OUTLIERS
-
-# Response variable
-par(mfrow = c(2, 2))
-# Response variable
-boxplot(df$Phenotype, ylab = "Phenotype", main = "Boxplot")
-dotchart(df$Phenotype,
-				 ylab = "Order of observations",
-				 xlab = "Phenotype", main = "Cleveland dotplot")
-boxplot(df$Phenotype~df$Individual, ylab = "X1", xlab = "Individual", main = "Boxplot")
-dotchart(df$Phenotype,
-				 groups = factor(df$Individual),
-				 ylab = "Individual", xlab = "Phenotype",
-				 main = "Cleveland dotplot", pch = df$Individual)
-
-
-# Explanatory variable
-par(mfrow = c(2, 2))
-# Explanatory variable
-boxplot(df$X1, ylab = "X1", main = "Boxplot")
-dotchart(df$X1, ylab = "Order of observations", xlab = "X1", main = "Cleveland dotplot")
-boxplot(df$X1~df$Individual, ylab = "X1", xlab = "Individual", main = "Boxplot")
-dotchart(df$X1,
-				 groups = factor(df$Individual),
-				 ylab = "Individual", xlab = "X1",
-				 main = "Cleveland dotplot", pch = df$Individual)
-
-
-
-par(mfrow=c(1,1))
-mod_lm  <- lm(Phenotype ~ X1, data = df)
-
-car::leveragePlots(mod_lm) # leverage plots
-car::outlierTest(mod_lm) # Bonferonni p-value for most extreme obs
-car::influencePlot(mod_lm)
-plot(mod_lm) # display diagnostic plot for an lm object
-
-
-# Leverage tests (Laszlo)
-lev = hat(model.matrix(mod_lm))
-max(stats:::influence(mod_lm)$hat)
-level1=2*(length(coefficients(mod_lm))+1)/length(residuals(mod_lm)) #laverage should be smaller than this
-level2=3*(length(coefficients(mod_lm))+1)/length(residuals(mod_lm)) #or this
-
-par(mfrow=c(1,2))
-plot(lev, ylim=c(0, level2))
-abline(h=level1, col="red", lty=2, lwd=1)
-abline(h=level2, col="red", lty=1, lwd=2)
-cutoff <- 4/((nrow(df)-length(mod_lm$coefficients)-2))
-plot(mod_lm, which=4, cook.levels=cutoff)
-
-
-#### Influencial points (using influenceME package)
-library(influence.ME)
-
-inl.diag.obs <- influence.ME:::influence(mod, obs = T)
-
-#cooks.distance
-inl.diag.cooks <- cooks.distance(inl.diag.obs)
-plot(inl.diag.obs, which="cook",
-		 cutoff=.17, sort=TRUE,
-		 xlab="Cook´s Distance",
-		 ylab="Individual's ID")
-
-# dfbetas
-inl.diag.dfB <- dfbetas.estex(inl.diag.obs, sort = TRUE, to.sort = "X1")
-plot(inl.diag.obs, which="dfbetas",
-		 cutoff=.17,sort = TRUE, to.sort = "X1",
-		 xlab="DFBETAS",
-		 ylab="Individuals ID")
-plot(inl.diag.obs, which="dfbetas",
-		 cutoff=.17,sort = TRUE, to.sort = "(Intercept)",
-		 xlab="DFBETAS",
-		 ylab="Individuals ID")
-
-### jackknife per point
-res    <- jackknife_point(mod, df)
-DBfit  <- res$DBfit
-DBbeta <- res$DBbeta
-
-ggplot(data=DBfit, aes(x=X1, y=fitted, color = as.factor(rank))) +
-	geom_point() + 
-	stat_smooth(method = "lm", alpha = 0) + 
-	theme(legend.position="none")
-
-#### Influencial groups (using influenceME package)
-
-# visualize the data per individual
-plot(df$Individual, df$Phenotype)
-
-inl.diag.group <- influence.ME:::influence(mod, group = "Individual")
-
-#cooks.distance
-inl.diag.cooks <- cooks.distance(inl.diag.group)
-plot(inl.diag.group, which="cook",
-		 cutoff=.17, sort=TRUE,
-		 xlab="Cook´s Distance",
-		 ylab="Individual's ID")
-
-inl.diag.dfB <- dfbetas.estex(inl.diag.group, sort = TRUE, to.sort = "X1")
-plot(inl.diag.group, which="dfbetas",
-		 cutoff=.17,sort = TRUE, to.sort = "X1",
-		 xlab="DFBETAS",
-		 ylab="Individuals ID")
-plot(inl.diag.group, which="dfbetas",
-		 cutoff=.17,sort = TRUE, to.sort = "(Intercept)",
-		 xlab="DFBETAS",
-		 ylab="Individuals ID")
-
-### jackknife per group
-res    <- jackknife.group(mod, df)
-DBfit  <- res$DBfit
-DBbeta <- res$DBbeta
-
-ggplot(data=DBfit, aes(x=X1, y=fitted, color = as.factor(rank))) +
-	geom_point() + 
-	stat_smooth(method = "lm", alpha = 0) + 
-	theme(legend.position="none")
-
-
-#################################################################################################
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#### Collinearity between the model predictors
-
-# Correlation between two predictors
-with(df,cor(X1, X2))
-
-# VIF
-df   <- df[!is.na(df$Phenotype),] # Remore rows with missing values
-mod  <- lmer(Phenotype ~ 1 + X1 + X2 + X1X2 + (X1|Individual), data = df)
-vif.mer(mod)
-
-########################################################################
-########################### Fit the model ##############################
-########################################################################
-df   <- df[!is.na(df$Phenotype),] # Remore rows with missing values
-
-# fit mixed-effect model
-mod  <- lmer(Phenotype ~ 1 + X1 + (X1|Individual), data = df)
-
-summary(mod)
-
-#### examining residuals #### 
-# centered around 0
-# normality 
-# homogeneity of variance
-diagnostics.plot(mod, df)
-
-# Check for residual pattern within individuals and difference between individuals      
-lattice::xyplot(residuals(mod) ~ fitted(mod) | df$Individual,
-			 main = "Residual pattern within Individuals",
-			 panel=function(x, y){ 
-			 	panel.xyplot(x, y) 
-			 	panel.loess(x, y, span = 0.75) 
-			 	panel.lmline(x, y, lty = 2)  # Least squares broken line
-			 } 
+# distribution.plot(df$Phenotype)
+
+
+################
+# COLLINEARITY #
+################
+
+GGally::ggpairs(
+	df, columns = c("X1", "X2", "Phenotype"),
+	diag  = list(continuous = "barDiag", colour = "grey"),
+	lower = list(
+		continuous = "smooth",
+		mapping    = aes(color = Individual)
+	)
 )
 
-### Check for autocorrelation in the residuals (independency)
-acf(residuals(mod))
+# VIF: Variance inflation factor
+# if VIF < threshold, no collinearity
+# Threshold =  10 (Montgomery, D.C. & Peck, E.A. 1992. Wiley)
+# Threshold =  3 (Zuur, A.F. et al. 2010. Methods in Ecology and Evolution)
 
-#### Test for outliers
-mod_lm  <- lm(Phenotype ~ 1 + X1, data = df)
-outlierTest(mod_lm) # Bonferonni p-value for most extreme obs
-leveragePlots(mod_lm) # leverage plots
-plot(mod_lm) # display diagnostic plot for an lm object
+mod  <- lm(Phenotype ~ X1 + X2, data = df)
+car::vif(mod)
+
+# Collinearity can be solved by dropping collinear covariates.
+# Using VIF
+# or (prehaps better) use common sens and biological knowledge
+
+
+################
+# MISSING DATA #
+################
+
+# df$missing <- ifelse(is.na(df$Phenotype), TRUE, FALSE)
+# 
+# Amelia::missmap(df)
+# 
+# # test if predictors of missing data are different from the not missing data
+# t.test(X1~missing, df)
+# boxplot(X1~missing, df)
+
+
+# # Response variable
+# par(mfrow = c(2, 2))
+# # Response variable
+# boxplot(df$Phenotype, ylab = "Phenotype", main = "Boxplot")
+# dotchart(df$Phenotype,
+# 				 ylab = "Order of observations",
+# 				 xlab = "Phenotype", main = "Cleveland dotplot")
+# boxplot(df$Phenotype~df$Individual, ylab = "X1", xlab = "Individual", main = "Boxplot")
+# dotchart(df$Phenotype,
+# 				 groups = factor(df$Individual),
+# 				 ylab = "Individual", xlab = "Phenotype",
+# 				 main = "Cleveland dotplot", pch = df$Individual)
+# 
+# 
+# # Explanatory variable
+# par(mfrow = c(2, 2))
+# # Explanatory variable
+# boxplot(df$X1, ylab = "X1", main = "Boxplot")
+# dotchart(df$X1, ylab = "Order of observations", xlab = "X1", main = "Cleveland dotplot")
+# boxplot(df$X1~df$Individual, ylab = "X1", xlab = "Individual", main = "Boxplot")
+# dotchart(df$X1,
+# 				 groups = factor(df$Individual),
+# 				 ylab = "Individual", xlab = "X1",
+# 				 main = "Cleveland dotplot", pch = df$Individual)
+
+
+###################
+# MODEL SELECTION #
+###################
+
+# Zuur, A. F. et al. (2009). Mixed Effects Models and Extensions in Ecology with R.
+
+
+## Step 1: beyond optimal model
+
+# include all explanatory variables and as many interactions
+# Example: Phenotype ~ X1 + X2 + X1:X2
+
+## Step 2: Find optimal random structure
+
+# Use REML to compare these (nested) models (with ML the variance estimates are biased).
+mod1  <- lme4::lmer(Phenotype ~ X1 + X2 + X1:X2 + (1 | Individual),  data = df, REML = TRUE)
+mod2  <- lme4::lmer(Phenotype ~ X1 + X2 + X1:X2 + (1 | Individual) + (-1 + X1 | Individual), data = df, REML = TRUE)
+mod3  <- lme4::lmer(Phenotype ~ X1 + X2 + X1:X2 + (X1 | Individual), data = df, REML = TRUE)
+
+lattice::dotplot(lme4::ranef(mod3, condVar = TRUE, whichel = "Individual"))
+
+model_selection(mod1, mod2, mod3)
+
+model_selection <- function(...){
+	
+	return(data.frame("df"    = AIC(...)$df,
+										"AIC"   = AIC(...)$AIC,
+										"wAIC"  = round(MuMIn::Weights(AIC(...)),3),
+										"AICc"  = MuMIn::AICc(...)$AICc,
+										"wAICc" = round(MuMIn::Weights(MuMIn::AICc(...)),3)))
+	
+}
+
+## Step 3: Find optimal fixed structure
+
+# Use ML and not REML
+mod4  <- lme4::lmer(Phenotype ~ X1 + (X1 | Individual), data = df, REML = FALSE)
+mod5  <- lme4::lmer(Phenotype ~ X1 + X2 + (X1 | Individual), data = df, REML = FALSE)
+mod6  <- lme4::lmer(Phenotype ~ X1 + X2 + X1:X2 + (X1 | Individual), data = df, REML = FALSE)
+	
+model_selection(mod4, mod5, mod6)
+
+## Step 4: Present the final model using REML estimation
+modf  <- lme4::lmer(Phenotype ~ X1 + X2 + X1:X2 + (X1 | Individual), data = df, REML = TRUE)
+summary(modf)
+
+
+#####################
+# RESIDUAL ANALYSIS #
+#####################
+
+# Loy, A., & Hofmann, H. (2013). Diagnostic tools for hierarchical linear models. 
+# Wiley Interdisciplinary Reviews: Computational Statistics, 5(1), 48–61.
+
+# "HLMdiag" Package #
+# Loy, A., & Hofmann, H. (2014). HLMdiag: A Suite of Diagnostics for Hierarchical Linear Models in R Adam. 
+# Journal Of Statistical Software, 56(5), 1–28.
+
+# Upward residual analysis
+
+### Level 1 (conditional) residuals
+
+resid1 <- HLMdiag::HLMresid(modf, level = 1, type = "LS", standardize = "semi")
+resid1 <- cbind(df$Individual, resid1)
+names(resid1)[1] <- "Individual"
+head(resid1)
+
+## check for linearity
+qplot(x =  fitted, y = LS.resid, data = resid1, geom = c("point", "smooth")) + ylab("LS level-1 residuals")
+qplot(x =  X1,     y = LS.resid, data = resid1, geom = c("point", "smooth")) + ylab("LS level-1 residuals")
+qplot(x =  X2,     y = LS.resid, data = resid1, geom = c("point", "smooth")) + ylab("LS level-1 residuals")
+
+## check for homoscedasticity
+qplot(x =  fitted, y = semi.std.resid, data = resid1, geom = c("point", "smooth")) + ylab("semi-standardized residuals")
+qplot(x =  X1,     y = semi.std.resid, data = resid1, geom = c("point", "smooth")) + ylab("semi-standardized residuals")
+qplot(x =  X2,     y = semi.std.resid, data = resid1, geom = c("point", "smooth")) + ylab("semi-standardized residuals")
+
+# Roughly constant interquartile ranges between groups
+boxplot(LS.resid ~ Individual, data = resid1)
+
+## Normality (quantile plot of the sem-=standardized level-1 residuals)
+HLMdiag::ggplot_qqnorm(x = resid1$semi.std.resid, line = "rlm")
+
+### Level 2 (random effects) residuals
+
+resid2 <- HLMdiag::HLMresid(object = modf, level = "Individual")
+head(resid2)
+
+## Normality of the random intercept
+hist(resid2$'(Intercept)')
+HLMdiag::ggplot_qqnorm(x = resid2$'(Intercept)', line = "rlm", main = "Random intercept")
+
+## Normality of the random slope
+hist(resid2$X1)
+HLMdiag::ggplot_qqnorm(x = resid2$X1, line = "rlm", main = "Random slope")
+
+
+######################
+# INFLUENCE ANALYSIS #
+######################
+
+# Start with diagnotics for the variance components as diagnostics 
+# for fixed effects require a specific covariance matrix.
+
+### Diagnostics for variance components
+
+# The relative variance change (RVC is close to 0 when deleted element is not influential)
+rvc1 <- HLMdiag::rvc(modf) # Level-1 deletion 
+rvc2 <- HLMdiag::rvc(modf, group = "Individual") # Level-2 (Individual-level) deletion
+
+head(rvc1)
+# sigma2: residual variance
+# D11: random intercept variance
+# D22: random slope variance
+# D12: covariance between random intercept and slope.
+
+# Visualize influential elements
+HLMdiag::dotplot_diag(x = rvc1[ , "D11"], cutoff = "internal", name = "rvc", modify = "dotplot") + ylab("Relative random intercept variance change") + xlab("Value")
+HLMdiag::dotplot_diag(x = rvc2[ , "D11"], cutoff = "internal", name = "rvc", modify = "dotplot") + ylab("Relative random intercept variance change") + xlab("Individual")
+
+
+### Diagnostics for fixed effects
+
+## Changes in parameter values
+
+# Cook's distance (larger values indicate higher leveles of influence)
+cooksd1 <- cooks.distance(modf) # Level-1 deletion 
+cooksd2 <- cooks.distance(modf, group = "Individual") # Level-2 (Individual-level) deletion
+
+# Visualize influential elements
+HLMdiag::dotplot_diag(x = cooksd1, cutoff = "internal", name = "cooks.distance", modify = "dotplot") + ylab("Cook's distance") + xlab("Value")
+HLMdiag::dotplot_diag(x = cooksd2, cutoff = "internal", name = "cooks.distance", modify = "dotplot") + ylab("Cook's distance") + xlab("Individual")
+
+# Access to the difference in the parameters associated with the deletion of one element
+beta_cdd <- as.numeric(attr(cooksd1, "beta_cdd")[[58]])
+names(beta_cdd) <- names(lme4::fixef(modf))
+beta_cdd
+
+## Precision of fixed parameters
+
+# Covariance ratio (Close to 1 when the deleted element is not influential)
+covratio1 <- HLMdiag::covratio(modf) # Level-1 deletion 
+covratio2 <- HLMdiag::covratio(modf, group = "Individual") # Level-2 (Individual-level) deletion
+
+# Visualize influential elements
+HLMdiag::dotplot_diag(x = covratio1, cutoff = "internal", name = "covratio", modify = "dotplot") + ylab("Covariance ratio") + xlab("Value")
+HLMdiag::dotplot_diag(x = covratio2, cutoff = "internal", name = "covratio", modify = "dotplot") + ylab("Covariance ratio") + xlab("Individual")
+
+
+### Diagnostics for fitted values
+
+# Leverage: can be defined as the rate of change in the fitted response 
+# with respect to the observed response
+leverage1 <- HLMdiag::leverage(modf, level = 1)
+leverage2 <- HLMdiag::leverage(modf, level = "Individual")
+
+head(leverage1)
+# overall: averall leverage
+# fixef: the fixed effects leverage
+# ranef: the random effects leverage (confounded: depends on the leverage associated with the fixed effects)
+# ranef.uc: the unconfounded random effects leverage (modified ranef)
+
+# Visualize influential elements
+HLMdiag::dotplot_diag(x = leverage1[ , "overall"], cutoff = "internal", name = "leverage", modify = "dotplot") + ylab("Overall leverage") + xlab("Value")
+HLMdiag::dotplot_diag(x = leverage2[ , "overall"], cutoff = "internal", name = "leverage", modify = "dotplot") + ylab("Overall leverage") + xlab("Individual")
+
+
+
+# ### jackknife per point
+# res    <- jackknife_point(modf, df)
+# DBfit  <- res$DBfit
+# DBbeta <- res$DBbeta
+# 
+# ggplot(data=DBfit, aes(x=X1, y=fitted, color = as.factor(rank))) +
+# 	geom_point() + 
+# 	stat_smooth(method = "lm", alpha = 0) + 
+# 	theme(legend.position="none")
+# 
+# 
+# ### jackknife per group
+# res    <- jackknife.group(mod, df)
+# DBfit  <- res$DBfit
+# DBbeta <- res$DBbeta
+# 
+# ggplot(data=DBfit, aes(x=X1, y=fitted, color = as.factor(rank))) +
+# 	geom_point() + 
+# 	stat_smooth(method = "lm", alpha = 0) + 
+# 	theme(legend.position="none")
+
+
+###################
+# AUTOCORRELATION #
+###################
+
+
+acf(residuals(modf))
+#variogram()
+
+
 
 
 
@@ -271,49 +293,48 @@ plot(mod_lm) # display diagnostic plot for an lm object
 ################### Extract estimated parameters #######################
 ########################################################################
 
-fixef(mod)    # fixed effect coefficients
-se.fixef(mod) # standard error of fixed effect coefficients
+lme4::fixef(modf)    # fixed effect coefficients
+arm::se.fixef(modf) # standard error of fixed effect coefficients
 
-as.data.frame(VarCorr(mod)) # get random effect (variances)
-se.coef(mod)  # standard error of fixed and random effect coefficients
+as.data.frame(lme4::VarCorr(modf)) # get random effect (variances)
+arm::se.ranef(modf)  # standard error of fixed and random effect coefficients
 
-ran_effect <- ranef(mod, condVar=TRUE, whichel = "Individual") # random effect for each individual
+ran_effect <- lme4::ranef(modf, condVar = TRUE, whichel = "Individual") # random effect for each individual
 lattice::dotplot(ran_effect) # plot random effect for each Individual with the standard error
 
 ########################################################################
 ####################### PARAMETRIC BOOTSTRAP ###########################
 ########################################################################
-require(boot)
 
 mySumm <- function(.) {
-	c(beta0 = fixef(.)["(Intercept)"],            # Intercept fixed effect coefficients
-		beta1 = fixef(.)["X1"],                     # Slope fixed effect coefficients
-		sig01 = as.data.frame(VarCorr(.))$vcov[1],  # Intercept random effect variance
-		sig02 = as.data.frame(VarCorr(.))$vcov[1],  # Slope random effect variance
+	c(beta0 = lme4::fixef(.)["(Intercept)"],            # Intercept fixed effect coefficients
+		beta1 = lme4::fixef(.)["X1"],                     # Slope fixed effect coefficients
+		sig01 = as.data.frame(lme4::VarCorr(.))$vcov[1],  # Intercept random effect variance
+		sig02 = as.data.frame(lme4::VarCorr(.))$vcov[1],  # Slope random effect variance
 		sigma = sigma(.)^2                          # residual variance
 	)
 }
 
-boo01 <- bootMer(mod, mySumm, nsim = 100, .progress = "txt", seed=101)
+boo01 <- lme4::bootMer(modf, mySumm, nsim = 100, .progress = "txt", seed = 101)
 
 ## intercept (fixed effect)
-fixef(mod)["(Intercept)"]
-(beta0 <- boot.ci(boo01, index=1, type=c("norm", "basic", "perc")))# beta0
+lme4::fixef(modf)["(Intercept)"]
+(beta0 <- boot::boot.ci(boo01, index=1, type=c("norm", "basic", "perc")))# beta0
 
 ## slope (fixed effect)
-fixef(mod)["X1"]
-(beta1 <- boot.ci(boo01, index=2, type=c("norm", "basic", "perc")))# beta1
+lme4::fixef(modf)["X1"]
+(beta1 <- boot::boot.ci(boo01, index=2, type=c("norm", "basic", "perc")))# beta1
 
 ## intercept standard deviation (random effect)
-as.data.frame(VarCorr(.))$vcov[1]
-(sig01 <- boot.ci(boo01, index=3, type=c("norm", "basic", "perc")))# sig01
+as.data.frame(lme4::VarCorr(modf))$vcov[1]
+(sig01 <- boot::boot.ci(boo01, index=3, type=c("norm", "basic", "perc")))# sig01
 
 ## slope standard deviation (random effect)
-as.data.frame(VarCorr(.))$vcov[4]
-(sig02 <- boot.ci(boo01, index=4, type=c("norm", "basic", "perc")))# sig02
+as.data.frame(lme4::VarCorr(modf))$vcov[4]
+(sig02 <- boot::boot.ci(boo01, index=4, type=c("norm", "basic", "perc")))# sig02
 
 ## residual standard deviation
 sigma(mod)^2
-(sigma <- boot.ci(boo01, index=5, type=c("norm", "basic", "perc")))# sigma
+(sigma <- boot::boot.ci(boo01, index=5, type=c("norm", "basic", "perc")))# sigma
 
 #########################################

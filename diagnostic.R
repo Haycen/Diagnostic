@@ -1,64 +1,53 @@
 # load packages and functions
 # source("diagnostic_fcns.r")
-# library(lme4)
-# library(car)
-# library(lattice)
-# library(arm)
+library(lme4)
+library(car)
+library(lattice)
+library(arm)
+library(GGally)
 library(ggplot2)
+library(HLMdiag)
+library(boot)
+library(BaylorEdPsych)
+library(psych)
+library(MuMIn)
+# install.packages("mvnmle")
 
 ## Load dataset
-df <- read.csv("datasets/dataset_5.csv")
+df <- read.csv("datasets/dataset_2.csv")
 
 head(df)
 str(df)
 
 df$Individual <- as.factor(df$Individual)
 
+# Examine sampling design
+table(df$Individual)
+
+# Visualize sampling time per individual
+ggplot(data = df, aes(x = Time,
+											y = Individual,
+											color = Individual)) +
+	geom_point() +
+	ggtitle("Sampling time per individual") +
+	xlab("Time") +
+	ylab("Individuals")
+
+
 ########################################################################
 ############ Issues to consider before fitting a model #################
 ########################################################################
 
-#### Data distribution
-# distribution.plot(df$Phenotype)
-
-
-################
-# COLLINEARITY #
-################
+#### Data overview
 
 GGally::ggpairs(
-	df, columns = c("X1", "X2", "Phenotype"),
+	df, columns = c("X1", "X2", "X3", "Phenotype"),
 	diag  = list(continuous = "barDiag", colour = "grey"),
 	lower = list(
 		continuous = "smooth",
 		mapping    = aes(color = Individual)
 	)
 )
-
-# VIF: Variance inflation factor
-# if VIF < threshold, no collinearity
-# Threshold =  10 (Montgomery, D.C. & Peck, E.A. 1992. Wiley)
-# Threshold =  3 (Zuur, A.F. et al. 2010. Methods in Ecology and Evolution)
-
-mod  <- lm(Phenotype ~ X1 + X2, data = df)
-car::vif(mod)
-
-# Collinearity can be solved by dropping collinear covariates.
-# Using VIF
-# or (prehaps better) use common sens and biological knowledge
-
-
-################
-# MISSING DATA #
-################
-
-# df$missing <- ifelse(is.na(df$Phenotype), TRUE, FALSE)
-# 
-# Amelia::missmap(df)
-# 
-# # test if predictors of missing data are different from the not missing data
-# t.test(X1~missing, df)
-# boxplot(X1~missing, df)
 
 
 # # Response variable
@@ -87,19 +76,96 @@ car::vif(mod)
 # 				 main = "Cleveland dotplot", pch = df$Individual)
 
 
+
+################
+# MISSING DATA #
+################
+
+# Nakagawa, S., & Freckleton, R. P. (2008). Missing inaction: the dangers of ignoring missing data. 
+# Trends in Ecology and Evolution, 23(11), 592–596.
+
+# Visualize missing data
+Amelia::missmap(df[ , c("Phenotype", "X1", "X2")])
+
+# missing completely at random (MCAR): the probability of missing
+# data in one variable is not related to any other variable in the data set
+
+# missing at random (MAR): the probability of missing data in a variable
+# is related to some other variable(s) in the data set
+
+# missing not at random (MNAR):the probability of missing data in a variable
+# is associated with this variable itself, even after controlling 
+# for other observed (related) variables
+
+## MCAR vs MAR and/or MNAR
+
+# test if predictors of missing data are different from the not missing data
+df$missing <- ifelse(is.na(df$Phenotype), 1, 0)
+t.test(X1~missing, df)
+boxplot(X1~missing, df)
+
+t.test(X2~missing, df)
+boxplot(X2~missing, df)
+
+# Little, R. J. A. (1988). A test of missing completely at random for multivariate data 
+# with missing values. Journal of the American Statistical Association, 83(404), 1198–1202.
+
+# Little's MCAR test
+res <- BaylorEdPsych::LittleMCAR(df[ , c("Phenotype", "X1", "X2")])
+# If significant data set contains non-MCAR missingness
+res$chi.square
+res$p.value
+
+
+# create the missingness matrix
+Missingness <- ifelse(is.na(df[ , c("Phenotype", "X1", "X2")]) == TRUE, 1, 0)
+
+# combine the original dataset with the missingness matrix
+MissData <- data.frame(df[ , c("Phenotype", "X1", "X2")], Missingness)
+psych::pairs.panels(MissData, ellipses = FALSE, method = "spearman")
+
+
+## Methods for Missing data
+# Data deletion
+# Single imputation
+# Multiple imputation
+# Data augmentation
+
+# Book:
+# Fox, G.A., Negrete-Yankelevich, S., Sosa, V.J. (2015). Ecological Statistics: 
+# Contemporary Theory and Application. Oxford University Press.
+
+
+
+################
+# COLLINEARITY #
+################
+
+# VIF: Variance inflation factor
+# if VIF < threshold, no collinearity
+# Threshold =  10 (Montgomery, D.C. & Peck, E.A. 1992. Wiley)
+# Threshold =  3 (Zuur, A.F. et al. 2010. Methods in Ecology and Evolution)
+
+mod  <- lm(Phenotype ~ X1 + X2 + X3, data = df)
+car::vif(mod)
+
+# Collinearity can be solved by dropping collinear covariates:
+# Using VIF or (prehaps better) use common sens and biological knowledge
+
+
+
 ###################
 # MODEL SELECTION #
 ###################
 
 # Zuur, A. F. et al. (2009). Mixed Effects Models and Extensions in Ecology with R.
 
-
-## Step 1: beyond optimal model
+### Step 1: beyond optimal model
 
 # include all explanatory variables and as many interactions
 # Example: Phenotype ~ X1 + X2 + X1:X2
 
-## Step 2: Find optimal random structure
+### Step 2: Find optimal random structure
 
 # Use REML to compare these (nested) models (with ML the variance estimates are biased).
 mod1  <- lme4::lmer(Phenotype ~ X1 + X2 + X1:X2 + (1 | Individual),  data = df, REML = TRUE)
@@ -108,30 +174,32 @@ mod3  <- lme4::lmer(Phenotype ~ X1 + X2 + X1:X2 + (X1 | Individual), data = df, 
 
 lattice::dotplot(lme4::ranef(mod3, condVar = TRUE, whichel = "Individual"))
 
-model_selection(mod1, mod2, mod3)
 
-model_selection <- function(...){
-	
-	return(data.frame("df"    = AIC(...)$df,
-										"AIC"   = AIC(...)$AIC,
-										"wAIC"  = round(MuMIn::Weights(AIC(...)),3),
-										"AICc"  = MuMIn::AICc(...)$AICc,
-										"wAICc" = round(MuMIn::Weights(MuMIn::AICc(...)),3)))
-	
-}
+data.frame("df"    = AIC(mod1, mod2, mod3)$df,
+	 				 "AIC"   = AIC(mod1, mod2, mod3)$AIC,
+	 				 "wAIC"  = round(MuMIn::Weights(AIC(mod1, mod2, mod3)),3),
+	 				 "AICc"  = MuMIn::AICc(mod1, mod2, mod3)$AICc,
+	 				 "wAICc" = round(MuMIn::Weights(MuMIn::AICc(mod1, mod2, mod3)),3))
 
-## Step 3: Find optimal fixed structure
+
+### Step 3: Find optimal fixed structure
 
 # Use ML and not REML
-mod4  <- lme4::lmer(Phenotype ~ X1 + (X1 | Individual), data = df, REML = FALSE)
-mod5  <- lme4::lmer(Phenotype ~ X1 + X2 + (X1 | Individual), data = df, REML = FALSE)
-mod6  <- lme4::lmer(Phenotype ~ X1 + X2 + X1:X2 + (X1 | Individual), data = df, REML = FALSE)
+mod4  <- lme4::lmer(Phenotype ~ X1 + (1 | Individual), data = df, REML = FALSE)
+mod5  <- lme4::lmer(Phenotype ~ X1 + X2 + (1 | Individual), data = df, REML = FALSE)
+mod6  <- lme4::lmer(Phenotype ~ X1 + X2 + X1:X2 + (1 | Individual), data = df, REML = FALSE)
 	
-model_selection(mod4, mod5, mod6)
+data.frame("df"    = AIC(mod4, mod5, mod6)$df,
+					 "AIC"   = AIC(mod4, mod5, mod6)$AIC,
+					 "wAIC"  = round(MuMIn::Weights(AIC(mod4, mod5, mod6)),3),
+					 "AICc"  = MuMIn::AICc(mod4, mod5, mod6)$AICc,
+					 "wAICc" = round(MuMIn::Weights(MuMIn::AICc(mod4, mod5, mod6)),3))
 
-## Step 4: Present the final model using REML estimation
-modf  <- lme4::lmer(Phenotype ~ X1 + X2 + X1:X2 + (X1 | Individual), data = df, REML = TRUE)
+
+### Step 4: Present the final model using REML estimation
+modf  <- lme4::lmer(Phenotype ~ X1 + X2 + X1:X2 + (1 | Individual) + (-1 + X1 | Individual), data = df, REML = TRUE)
 summary(modf)
+
 
 
 #####################
@@ -182,6 +250,7 @@ HLMdiag::ggplot_qqnorm(x = resid2$'(Intercept)', line = "rlm", main = "Random in
 ## Normality of the random slope
 hist(resid2$X1)
 HLMdiag::ggplot_qqnorm(x = resid2$X1, line = "rlm", main = "Random slope")
+
 
 
 ######################
@@ -244,7 +313,7 @@ leverage1 <- HLMdiag::leverage(modf, level = 1)
 leverage2 <- HLMdiag::leverage(modf, level = "Individual")
 
 head(leverage1)
-# overall: averall leverage
+# overall: overall leverage
 # fixef: the fixed effects leverage
 # ranef: the random effects leverage (confounded: depends on the leverage associated with the fixed effects)
 # ranef.uc: the unconfounded random effects leverage (modified ranef)
@@ -254,46 +323,21 @@ HLMdiag::dotplot_diag(x = leverage1[ , "overall"], cutoff = "internal", name = "
 HLMdiag::dotplot_diag(x = leverage2[ , "overall"], cutoff = "internal", name = "leverage", modify = "dotplot") + ylab("Overall leverage") + xlab("Individual")
 
 
-
-# ### jackknife per point
-# res    <- jackknife_point(modf, df)
-# DBfit  <- res$DBfit
-# DBbeta <- res$DBbeta
-# 
-# ggplot(data=DBfit, aes(x=X1, y=fitted, color = as.factor(rank))) +
-# 	geom_point() + 
-# 	stat_smooth(method = "lm", alpha = 0) + 
-# 	theme(legend.position="none")
-# 
-# 
-# ### jackknife per group
-# res    <- jackknife.group(mod, df)
-# DBfit  <- res$DBfit
-# DBbeta <- res$DBbeta
-# 
-# ggplot(data=DBfit, aes(x=X1, y=fitted, color = as.factor(rank))) +
-# 	geom_point() + 
-# 	stat_smooth(method = "lm", alpha = 0) + 
-# 	theme(legend.position="none")
-
-
 ###################
 # AUTOCORRELATION #
 ###################
 
-
+#???????????????????????????????????????????????????????????????????????????????????????
 acf(residuals(modf))
 #variogram()
 
 
 
+################################
+# Extract estimated parameters #
+################################
 
-
-########################################################################
-################### Extract estimated parameters #######################
-########################################################################
-
-lme4::fixef(modf)    # fixed effect coefficients
+lme4::fixef(modf)   # fixed effect coefficients
 arm::se.fixef(modf) # standard error of fixed effect coefficients
 
 as.data.frame(lme4::VarCorr(modf)) # get random effect (variances)
@@ -302,39 +346,36 @@ arm::se.ranef(modf)  # standard error of fixed and random effect coefficients
 ran_effect <- lme4::ranef(modf, condVar = TRUE, whichel = "Individual") # random effect for each individual
 lattice::dotplot(ran_effect) # plot random effect for each Individual with the standard error
 
-########################################################################
-####################### PARAMETRIC BOOTSTRAP ###########################
-########################################################################
+
+
+########################
+# PARAMETRIC BOOTSTRAP #
+########################
 
 mySumm <- function(.) {
-	c(beta0 = lme4::fixef(.)["(Intercept)"],            # Intercept fixed effect coefficients
-		beta1 = lme4::fixef(.)["X1"],                     # Slope fixed effect coefficients
-		sig01 = as.data.frame(lme4::VarCorr(.))$vcov[1],  # Intercept random effect variance
-		sig02 = as.data.frame(lme4::VarCorr(.))$vcov[1],  # Slope random effect variance
-		sigma = sigma(.)^2                          # residual variance
+	c(beta  = lme4::fixef(.),                       # fixed effect coefficients
+		ranv  = as.data.frame(lme4::VarCorr(.))$vcov  # random effect variances
 	)
 }
 
+# Run bootstrap
 boo01 <- lme4::bootMer(modf, mySumm, nsim = 100, .progress = "txt", seed = 101)
 
-## intercept (fixed effect)
-lme4::fixef(modf)["(Intercept)"]
-(beta0 <- boot::boot.ci(boo01, index=1, type=c("norm", "basic", "perc")))# beta0
+# Custom function to extract parameter estimate confidence intervals
+bCI.tab <- function(b, original, ind=length(b$t0), type="perc", conf=0.95) {
+	
+	btab0 <- t(sapply(as.list(seq(ind)), function(i) boot::boot.ci(b, index = i, conf = conf, type = type)$percent))
+	btab  <- btab0[,4:5]
+	rownames(btab) <- names(b$t0)
+	a <- (1 - conf)/2
+	a <- c(a, 1 - a)
+	pct <- stats:::format.perc(a, 3)
+	btab <- cbind(btab[,1], original, btab[,2])
+	colnames(btab) <- c(pct[1], "original", pct[2])
+	
+	return(btab)
+}
 
-## slope (fixed effect)
-lme4::fixef(modf)["X1"]
-(beta1 <- boot::boot.ci(boo01, index=2, type=c("norm", "basic", "perc")))# beta1
+# Calculate confidence intervals
+bCI.tab(boo01, mySumm(modf))
 
-## intercept standard deviation (random effect)
-as.data.frame(lme4::VarCorr(modf))$vcov[1]
-(sig01 <- boot::boot.ci(boo01, index=3, type=c("norm", "basic", "perc")))# sig01
-
-## slope standard deviation (random effect)
-as.data.frame(lme4::VarCorr(modf))$vcov[4]
-(sig02 <- boot::boot.ci(boo01, index=4, type=c("norm", "basic", "perc")))# sig02
-
-## residual standard deviation
-sigma(mod)^2
-(sigma <- boot::boot.ci(boo01, index=5, type=c("norm", "basic", "perc")))# sigma
-
-#########################################

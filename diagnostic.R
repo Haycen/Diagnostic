@@ -41,40 +41,13 @@ ggplot(data = df, aes(x = Time,
 #### Data overview
 
 GGally::ggpairs(
-	df, columns = c("X1", "X2", "X3", "Phenotype"),
+	df, columns = c("X1", "X2", "Phenotype"),
 	diag  = list(continuous = "barDiag", colour = "grey"),
 	lower = list(
 		continuous = "smooth",
 		mapping    = aes(color = Individual)
 	)
 )
-
-
-# # Response variable
-# par(mfrow = c(2, 2))
-# # Response variable
-# boxplot(df$Phenotype, ylab = "Phenotype", main = "Boxplot")
-# dotchart(df$Phenotype,
-# 				 ylab = "Order of observations",
-# 				 xlab = "Phenotype", main = "Cleveland dotplot")
-# boxplot(df$Phenotype~df$Individual, ylab = "X1", xlab = "Individual", main = "Boxplot")
-# dotchart(df$Phenotype,
-# 				 groups = factor(df$Individual),
-# 				 ylab = "Individual", xlab = "Phenotype",
-# 				 main = "Cleveland dotplot", pch = df$Individual)
-# 
-# 
-# # Explanatory variable
-# par(mfrow = c(2, 2))
-# # Explanatory variable
-# boxplot(df$X1, ylab = "X1", main = "Boxplot")
-# dotchart(df$X1, ylab = "Order of observations", xlab = "X1", main = "Cleveland dotplot")
-# boxplot(df$X1~df$Individual, ylab = "X1", xlab = "Individual", main = "Boxplot")
-# dotchart(df$X1,
-# 				 groups = factor(df$Individual),
-# 				 ylab = "Individual", xlab = "X1",
-# 				 main = "Cleveland dotplot", pch = df$Individual)
-
 
 
 ################
@@ -146,7 +119,7 @@ psych::pairs.panels(MissData, ellipses = FALSE, method = "spearman")
 # Threshold =  10 (Montgomery, D.C. & Peck, E.A. 1992. Wiley)
 # Threshold =  3 (Zuur, A.F. et al. 2010. Methods in Ecology and Evolution)
 
-mod  <- lm(Phenotype ~ X1 + X2 + X3, data = df)
+mod  <- lm(Phenotype ~ X1 + X2, data = df)
 car::vif(mod)
 
 # Collinearity can be solved by dropping collinear covariates:
@@ -172,6 +145,7 @@ mod1  <- lme4::lmer(Phenotype ~ X1 + X2 + X1:X2 + (1 | Individual),  data = df, 
 mod2  <- lme4::lmer(Phenotype ~ X1 + X2 + X1:X2 + (1 | Individual) + (-1 + X1 | Individual), data = df, REML = TRUE)
 mod3  <- lme4::lmer(Phenotype ~ X1 + X2 + X1:X2 + (X1 | Individual), data = df, REML = TRUE)
 
+
 lattice::dotplot(lme4::ranef(mod3, condVar = TRUE, whichel = "Individual"))
 
 
@@ -188,7 +162,7 @@ data.frame("df"    = AIC(mod1, mod2, mod3)$df,
 mod4  <- lme4::lmer(Phenotype ~ X1 + (1 | Individual), data = df, REML = FALSE)
 mod5  <- lme4::lmer(Phenotype ~ X1 + X2 + (1 | Individual), data = df, REML = FALSE)
 mod6  <- lme4::lmer(Phenotype ~ X1 + X2 + X1:X2 + (1 | Individual), data = df, REML = FALSE)
-	
+
 data.frame("df"    = AIC(mod4, mod5, mod6)$df,
 					 "AIC"   = AIC(mod4, mod5, mod6)$AIC,
 					 "wAIC"  = round(MuMIn::Weights(AIC(mod4, mod5, mod6)),3),
@@ -198,6 +172,7 @@ data.frame("df"    = AIC(mod4, mod5, mod6)$df,
 
 ### Step 4: Present the final model using REML estimation
 modf  <- lme4::lmer(Phenotype ~ X1 + X2 + X1:X2 + (1 | Individual) + (-1 + X1 | Individual), data = df, REML = TRUE)
+
 summary(modf)
 
 
@@ -205,6 +180,36 @@ summary(modf)
 #####################
 # RESIDUAL ANALYSIS #
 #####################
+
+# Response variable
+par(mfrow = c(2, 2))
+# Response variable
+boxplot(df$Phenotype, ylab = "Phenotype", main = "Boxplot")
+dotchart(df$Phenotype,
+				 ylab = "Order of observations",
+				 xlab = "Phenotype", main = "Cleveland dotplot")
+
+boxplot(df$Phenotype~df$Individual, ylab = "Phenotype", xlab = "Individual", main = "Boxplot")
+dotchart(df$Phenotype,
+				 groups = df$Individual,
+				 ylab = "Individual", xlab = "Phenotype",
+				 main = "Cleveland dotplot", pch = df$Individual)
+
+
+# Explanatory variable
+par(mfrow = c(2, 2))
+# Explanatory variable
+boxplot(df$X1, ylab = "X1", main = "Boxplot")
+dotchart(df$X1, ylab = "Order of observations", xlab = "X1", main = "Cleveland dotplot")
+boxplot(df$X1~df$Individual, ylab = "X1", xlab = "Individual", main = "Boxplot")
+dotchart(df$X1,
+				 groups = df$Individual,
+				 ylab = "Individual", xlab = "X1",
+				 main = "Cleveland dotplot", pch = df$Individual)
+
+par(mfrow = c(1, 1))
+
+
 
 # Loy, A., & Hofmann, H. (2013). Diagnostic tools for hierarchical linear models. 
 # Wiley Interdisciplinary Reviews: Computational Statistics, 5(1), 48–61.
@@ -232,6 +237,9 @@ qplot(x =  fitted, y = semi.std.resid, data = resid1, geom = c("point", "smooth"
 qplot(x =  X1,     y = semi.std.resid, data = resid1, geom = c("point", "smooth")) + ylab("semi-standardized residuals")
 qplot(x =  X2,     y = semi.std.resid, data = resid1, geom = c("point", "smooth")) + ylab("semi-standardized residuals")
 
+diagnostics.plot(modf, df)
+
+
 # Roughly constant interquartile ranges between groups
 boxplot(LS.resid ~ Individual, data = resid1)
 
@@ -257,6 +265,7 @@ HLMdiag::ggplot_qqnorm(x = resid2$X1, line = "rlm", main = "Random slope")
 # INFLUENCE ANALYSIS #
 ######################
 
+
 # Start with diagnotics for the variance components as diagnostics 
 # for fixed effects require a specific covariance matrix.
 
@@ -274,7 +283,7 @@ head(rvc1)
 
 # Visualize influential elements
 HLMdiag::dotplot_diag(x = rvc1[ , "D11"], cutoff = "internal", name = "rvc", modify = "dotplot") + ylab("Relative random intercept variance change") + xlab("Value")
-HLMdiag::dotplot_diag(x = rvc2[ , "D11"], cutoff = "internal", name = "rvc", modify = "dotplot") + ylab("Relative random intercept variance change") + xlab("Individual")
+HLMdiag::dotplot_diag(x = rvc2[ , "D11"], cutoff = "internal", name = "rvc") + ylab("Relative random intercept variance change") + xlab("Individual")
 
 
 ### Diagnostics for fixed effects
@@ -293,6 +302,7 @@ HLMdiag::dotplot_diag(x = cooksd2, cutoff = "internal", name = "cooks.distance",
 beta_cdd <- as.numeric(attr(cooksd1, "beta_cdd")[[58]])
 names(beta_cdd) <- names(lme4::fixef(modf))
 beta_cdd
+
 
 ## Precision of fixed parameters
 
@@ -327,8 +337,9 @@ HLMdiag::dotplot_diag(x = leverage2[ , "overall"], cutoff = "internal", name = "
 # AUTOCORRELATION #
 ###################
 
-#???????????????????????????????????????????????????????????????????????????????????????
+
 acf(residuals(modf))
+
 #variogram()
 
 
@@ -378,4 +389,3 @@ bCI.tab <- function(b, original, ind=length(b$t0), type="perc", conf=0.95) {
 
 # Calculate confidence intervals
 bCI.tab(boo01, mySumm(modf))
-

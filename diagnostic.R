@@ -1,5 +1,4 @@
 # load packages and functions
-# source("diagnostic_fcns.r")
 library(lme4)
 library(car)
 library(lattice)

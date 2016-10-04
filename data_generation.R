@@ -14,13 +14,13 @@ dataset_1 <- orig_data_1[ , .(Individual, Time, Phenotype, X1, X2)]
 # Parameters:
 # NI      = 12
 # NR      = 15
-# d1_b0   = 0.5
-# d1_b1   = 0.8
-# d1_b2   = 0.2
-# d1_b12  = 0.5
-# d1_VI   = 1.0
-# d1_VS1  = 0.5
-# d1_Ve   = 0.05
+# b0   = 0.5
+# b1   = 0.8
+# b2   = 0.2
+# b12  = 0.5
+# VI   = 1.0
+# VS1  = 0.5
+# Ve   = 0.05
 
 # Add missing data (15% of response variable)
 dataset_1[sample(nrow(dataset_1), round(nrow(dataset_1) * 0.15), replace = FALSE), Phenotype := NA]
@@ -50,13 +50,13 @@ dataset_2[ , X3 := 0.7 * X2 + rnorm(.N, 0, 0.3)]
 # Parameters:
 # NI      = 20 
 # NR      ~ 10
-# d1_b0   = 0.9
-# d1_b1   = 1.2
-# d1_b2   = 0.2
-# d1_VI   = 1.0
-# d1_VS1  = 0.6
-# d1_VS2  = 0.2
-# d1_Ve   = 0.05
+# b0   = 0.9
+# b1   = 1.2
+# b2   = 0.2
+# VI   = 1.0
+# VS1  = 0.6
+# VS2  = 0.2
+# Ve   = 0.05
 
 write.csv(x = dataset_2, file = "./datasets/dataset_2.csv", row.names = FALSE)
 
@@ -80,10 +80,10 @@ dataset_3 <- orig_data_3[ , .(Individual, Time, Phenotype, X1)]
 # Parameters:
 # NI      = 25 
 # NR      = 10
-# d1_b0   = 3.4
-# d1_b1   = 1.3
-# d1_VI   = 0.9
-# d1_Ve   = 0.05
+# b0   = 3.4
+# b1   = 1.3
+# VI   = 0.9
+# Ve   = 0.05
 
 write.csv(x = dataset_3, file = "./datasets/dataset_3.csv", row.names = FALSE)
 

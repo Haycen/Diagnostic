@@ -4,7 +4,7 @@ library(data.table)
 # Dataset 1 # (used as example)
 #############
 
-# Model: Phenotype ~ X1 + X1 + X2 + X1:X2 + (1 | Individual) + (-1 + X1 | Individual)
+# Model: Phenotype ~ X1 + X2 + X1:X2 + (1 | Individual) + (-1 + X1 | Individual)
 
 # Read data
 orig_data_1 <- fread("./datasets/dataset_original_1.csv")
@@ -119,7 +119,7 @@ write.csv(x = dataset_4, file = "./datasets/dataset_4.csv", row.names = FALSE)
 
 
 #############
-# Dataset 5 # 
+# Dataset 5 # Residual variance increase qith X1
 #############
 
 # Model: Phenotype ~ X1 + X2 + (1 | Individual)
@@ -127,13 +127,9 @@ write.csv(x = dataset_4, file = "./datasets/dataset_4.csv", row.names = FALSE)
 # Read data
 orig_data_5 <- fread("./datasets/dataset_original_5.csv")
 
-nb     <- nrow(orig_data_5)
-me     <- rep(0, nb)
-varseq <- seq(0,10,10/nb)
-for (i in 1:nb) { me[i] <- rnorm(1,0,varseq[i])}
-
+orig_data_5[ , X_tmp := X1 - min(X1)]
+orig_data_5[ , me := rnorm(.N,0,X_tmp*2)]
 orig_data_5[ , Phenotype := B0 + I + (B1 * X1) + (B2 * X2) + me]
-
 
 # Subset data
 dataset_5 <- orig_data_5[ , .(Individual, Time, Phenotype, X1, X2)]

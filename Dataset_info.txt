@@ -1,0 +1,30 @@
+#############
+# Dataset 1 #
+#############
+
+# Model: Phenotype ~ X1 + X1 + X2 + X1:X2 + (1 | Individual) + (-1 + X1 | Individual)
+
+#############
+# Dataset 2 #
+#############
+
+# Model: Phenotype ~ X1 + X2 + (1 | Individual) + (-1 + X1 | Individual) + (-1 + X2 | Individual)
+
+#############
+# Dataset 3 #
+#############
+
+# Model: Phenotype ~ X1 + (1 | Individual)
+
+#############
+# Dataset 4 # 
+#############
+
+# Model: Phenotype ~ X1 + X2 + X1:X2 + (X1 | Individual) + (-1 + X1:X2 | Individual)
+
+
+#############
+# Dataset 5 #
+#############
+
+# Model: Phenotype ~ X1 + X2 + (1 | Individual)

@@ -1,19 +1,23 @@
 # load packages and functions
 library(lme4)
+library(lmerTest)
 library(car)
 library(lattice)
 library(arm)
 library(GGally)
 library(ggplot2)
+library(nullabor)
 library(HLMdiag)
 library(boot)
 library(BaylorEdPsych)
 library(psych)
 library(MuMIn)
-# install.packages("mvnmle")
+library(Amelia)
+library(mvnmle)
+library(plyr)
 
 ## Load dataset
-df <- read.csv("datasets/dataset_2.csv")
+df <- read.csv("datasets/dataset_1.csv")
 
 head(df)
 str(df)
@@ -33,21 +37,30 @@ ggplot(data = df, aes(x = Time,
 	ylab("Individuals")
 
 
-########################################################################
-############ Issues to consider before fitting a model #################
-########################################################################
+######################################################################
+############ Data exploration before fitting a model #################
+######################################################################
 
 #### Data overview
 
+
 GGally::ggpairs(
-	df, columns = c("X1", "X2", "Phenotype"),
+	df, columns = c(grep("X", names(df), value = TRUE), "Phenotype"),
+	diag  = list(continuous = "barDiag", colour = "grey"),
+	lower = list(
+		continuous = "smooth"
+	)
+)
+
+# By individuals
+GGally::ggpairs(
+	df, columns = c(grep("X", names(df), value = TRUE), "Phenotype"),
 	diag  = list(continuous = "barDiag", colour = "grey"),
 	lower = list(
 		continuous = "smooth",
 		mapping    = aes(color = Individual)
 	)
 )
-
 
 ################
 # MISSING DATA #
@@ -57,7 +70,7 @@ GGally::ggpairs(
 # Trends in Ecology and Evolution, 23(11), 592–596.
 
 # Visualize missing data
-Amelia::missmap(df[ , c("Phenotype", "X1", "X2")])
+Amelia::missmap(df[ , c(grep("X", names(df), value = TRUE), "Phenotype")])
 
 # missing completely at random (MCAR): the probability of missing
 # data in one variable is not related to any other variable in the data set
@@ -83,18 +96,22 @@ boxplot(X2~missing, df)
 # with missing values. Journal of the American Statistical Association, 83(404), 1198–1202.
 
 # Little's MCAR test
-res <- BaylorEdPsych::LittleMCAR(df[ , c("Phenotype", "X1", "X2")])
+res <- BaylorEdPsych::LittleMCAR(df[ , c(grep("X", names(df), value = TRUE), "Phenotype")])
 # If significant data set contains non-MCAR missingness
 res$chi.square
 res$p.value
 
 
 # create the missingness matrix
-Missingness <- ifelse(is.na(df[ , c("Phenotype", "X1", "X2")]) == TRUE, 1, 0)
+Missingness <- ifelse(is.na(df[ , c(grep("X", names(df), value = TRUE), "Phenotype")]) == TRUE, 1, 0)
 
 # combine the original dataset with the missingness matrix
-MissData <- data.frame(df[ , c("Phenotype", "X1", "X2")], Missingness)
+MissData <- data.frame(df[ , c(grep("X", names(df), value = TRUE), "Phenotype")], Missingness)
 psych::pairs.panels(MissData, ellipses = FALSE, method = "spearman")
+
+
+# Remove missing values
+df <- df[!is.na(df$Phenotype),]
 
 
 ## Methods for Missing data
@@ -124,6 +141,8 @@ car::vif(mod)
 # Collinearity can be solved by dropping collinear covariates:
 # Using VIF or (prehaps better) use common sens and biological knowledge
 
+# You can also summarize multiple colinear explanatory variables 
+# in one vairable by using a principal component analaysis (e.g. PC1) 
 
 
 ###################
@@ -131,6 +150,14 @@ car::vif(mod)
 ###################
 
 # Zuur, A. F. et al. (2009). Mixed Effects Models and Extensions in Ecology with R.
+# Burnham, K. P. and Anderson, D. R
+
+# Garamszegi, L. Z. (2011). Information-theoretic approaches to statistical analysis in 
+# behavioural ecology: an introduction. Behavioral Ecology and Sociobiology, 65(1), 1–11.
+
+# Hegyi, G., & Garamszegi, L. Z. (2011). Using information theory as a substitute for stepwise 
+# regression in ecology and behavior. Behavioral Ecology and Sociobiology, 65(1), 69–76
+
 
 ### Step 1: beyond optimal model
 
@@ -144,11 +171,11 @@ mod1  <- lme4::lmer(Phenotype ~ X1 + X2 + X1:X2 + (1 | Individual),  data = df, 
 mod2  <- lme4::lmer(Phenotype ~ X1 + X2 + X1:X2 + (1 | Individual) + (-1 + X1 | Individual), data = df, REML = TRUE)
 mod3  <- lme4::lmer(Phenotype ~ X1 + X2 + X1:X2 + (X1 | Individual), data = df, REML = TRUE)
 
-
 lattice::dotplot(lme4::ranef(mod3, condVar = TRUE, whichel = "Individual"))
 
 
-data.frame("df"    = AIC(mod1, mod2, mod3)$df,
+data.frame("Model" = c("mod1", "mod2", "mod3"),
+					 "df"    = AIC(mod1, mod2, mod3)$df,
 	 				 "AIC"   = AIC(mod1, mod2, mod3)$AIC,
 	 				 "wAIC"  = round(MuMIn::Weights(AIC(mod1, mod2, mod3)),3),
 	 				 "AICc"  = MuMIn::AICc(mod1, mod2, mod3)$AICc,
@@ -162,7 +189,8 @@ mod4  <- lme4::lmer(Phenotype ~ X1 + (1 | Individual), data = df, REML = FALSE)
 mod5  <- lme4::lmer(Phenotype ~ X1 + X2 + (1 | Individual), data = df, REML = FALSE)
 mod6  <- lme4::lmer(Phenotype ~ X1 + X2 + X1:X2 + (1 | Individual), data = df, REML = FALSE)
 
-data.frame("df"    = AIC(mod4, mod5, mod6)$df,
+data.frame("Model" = c("mod4", "mod5", "mod6"),
+					 "df"    = AIC(mod4, mod5, mod6)$df,
 					 "AIC"   = AIC(mod4, mod5, mod6)$AIC,
 					 "wAIC"  = round(MuMIn::Weights(AIC(mod4, mod5, mod6)),3),
 					 "AICc"  = MuMIn::AICc(mod4, mod5, mod6)$AICc,
@@ -222,28 +250,68 @@ par(mfrow = c(1, 1))
 ### Level 1 (conditional) residuals
 
 resid1 <- HLMdiag::HLMresid(modf, level = 1, type = "LS", standardize = "semi")
-resid1 <- cbind(df$Individual, resid1)
+resid1 <- cbind(modf@frame$Individual, resid1)
 names(resid1)[1] <- "Individual"
 head(resid1)
 
-## check for linearity
-qplot(x =  fitted, y = LS.resid, data = resid1, geom = c("point", "smooth")) + ylab("LS level-1 residuals")
-qplot(x =  X1,     y = LS.resid, data = resid1, geom = c("point", "smooth")) + ylab("LS level-1 residuals")
-qplot(x =  X2,     y = LS.resid, data = resid1, geom = c("point", "smooth")) + ylab("LS level-1 residuals")
 
 ## check for homoscedasticity
 qplot(x =  fitted, y = semi.std.resid, data = resid1, geom = c("point", "smooth")) + ylab("semi-standardized residuals")
 qplot(x =  X1,     y = semi.std.resid, data = resid1, geom = c("point", "smooth")) + ylab("semi-standardized residuals")
 qplot(x =  X2,     y = semi.std.resid, data = resid1, geom = c("point", "smooth")) + ylab("semi-standardized residuals")
 
-diagnostics.plot(modf, df)
+# Lineup protocol
+
+# Buja A, Cook D, Hofmann H, Lawrence M, Lee EK, Swayne DF, Wickham H (2009). 
+# “Statistical Inference for Exploratory Data Analysis and Model Diagnostics.” 
+# Philosophical Transactions of the Royal Society A: Mathematical, Physical 
+# and Engineering Sciences, 367(1906), 4361–4383.
+
+# Simulated data
+n.sim      <- 19
+sim_modf   <- simulate(modf, nsim = n.sim)
+refit_modf <- apply(sim_modf, 2, refit, object = modf)
+sim_modf_resid <- plyr::ldply(refit_modf, function(x){
+	HLMresid(object = x, level = 1, type = "LS", sim = x@resp$y, standardize = "semi")
+})
+sim_modf_resid$Individual <- rep(resid1$Individual)
+
+# Original data
+resid1$.id <- "sim_modf"
+
+# Combine data in one data.frame
+sim_modf_resid   <- rbind(sim_modf_resid, resid1)
+sim_modf_resid$n <- rep(sample(n.sim + 1, replace = FALSE), each = nrow(modf@frame))
+
+# Visualize data
+qplot(X1, semi.std.resid, data = sim_modf_resid, geom = "point", alpha = I(0.3)) + 
+	facet_wrap(~n, ncol = 4) + 
+	geom_hline(aes(yintercept = 0), colour = I("red")) + 
+	ylab("semi-standardized residuals")
+
+# get original data id
+sim_modf_resid[sim_modf_resid$.id == "sim_modf", "n"][1]
 
 
 # Roughly constant interquartile ranges between groups
 boxplot(LS.resid ~ Individual, data = resid1)
 
+d1 <- dlply(sim_modf_resid,.(n),function(u, MIN=min(sim_modf_resid$LS.resid), MAX=max(sim_modf_resid$LS.resid)) { 
+	ggplot(u, aes(reorder(Individual, LS.resid, IQR), LS.resid)) +
+		ggtitle(u$n) +
+		geom_boxplot() + 
+		coord_flip() + 
+		ylim(MIN, MAX) +
+		ylab("Residuals") + 
+		xlab("Individuals") +
+		theme(axis.text.y = element_blank())
+}) 
+gridExtra::grid.arrange(grobs = d1, nrow = 4)
+
+
 ## Normality (quantile plot of the sem-=standardized level-1 residuals)
 HLMdiag::ggplot_qqnorm(x = resid1$semi.std.resid, line = "rlm")
+
 
 ### Level 2 (random effects) residuals
 
@@ -281,8 +349,8 @@ head(rvc1)
 # D12: covariance between random intercept and slope.
 
 # Visualize influential elements
-HLMdiag::dotplot_diag(x = rvc1[ , "D11"], cutoff = "internal", name = "rvc", modify = "dotplot") + ylab("Relative random intercept variance change") + xlab("Value")
 HLMdiag::dotplot_diag(x = rvc2[ , "D11"], cutoff = "internal", name = "rvc") + ylab("Relative random intercept variance change") + xlab("Individual")
+HLMdiag::dotplot_diag(x = rvc1[ , "D11"], cutoff = "internal", name = "rvc", modify = "dotplot") + ylab("Relative random intercept variance change") + xlab("Value")
 
 
 ### Diagnostics for fixed effects
@@ -290,15 +358,15 @@ HLMdiag::dotplot_diag(x = rvc2[ , "D11"], cutoff = "internal", name = "rvc") + y
 ## Changes in parameter values
 
 # Cook's distance (larger values indicate higher leveles of influence)
-cooksd1 <- cooks.distance(modf) # Level-1 deletion 
 cooksd2 <- cooks.distance(modf, group = "Individual") # Level-2 (Individual-level) deletion
+cooksd1 <- cooks.distance(modf) # Level-1 deletion 
 
 # Visualize influential elements
-HLMdiag::dotplot_diag(x = cooksd1, cutoff = "internal", name = "cooks.distance", modify = "dotplot") + ylab("Cook's distance") + xlab("Value")
 HLMdiag::dotplot_diag(x = cooksd2, cutoff = "internal", name = "cooks.distance", modify = "dotplot") + ylab("Cook's distance") + xlab("Individual")
+HLMdiag::dotplot_diag(x = cooksd1, cutoff = "internal", name = "cooks.distance", modify = "dotplot") + ylab("Cook's distance") + xlab("Value")
 
 # Access to the difference in the parameters associated with the deletion of one element
-beta_cdd <- as.numeric(attr(cooksd1, "beta_cdd")[[58]])
+beta_cdd <- as.numeric(attr(cooksd1, "beta_cdd")[[98]])
 names(beta_cdd) <- names(lme4::fixef(modf))
 beta_cdd
 
@@ -306,20 +374,20 @@ beta_cdd
 ## Precision of fixed parameters
 
 # Covariance ratio (Close to 1 when the deleted element is not influential)
-covratio1 <- HLMdiag::covratio(modf) # Level-1 deletion 
 covratio2 <- HLMdiag::covratio(modf, group = "Individual") # Level-2 (Individual-level) deletion
+covratio1 <- HLMdiag::covratio(modf) # Level-1 deletion 
 
 # Visualize influential elements
-HLMdiag::dotplot_diag(x = covratio1, cutoff = "internal", name = "covratio", modify = "dotplot") + ylab("Covariance ratio") + xlab("Value")
 HLMdiag::dotplot_diag(x = covratio2, cutoff = "internal", name = "covratio", modify = "dotplot") + ylab("Covariance ratio") + xlab("Individual")
+HLMdiag::dotplot_diag(x = covratio1, cutoff = "internal", name = "covratio", modify = "dotplot") + ylab("Covariance ratio") + xlab("Value")
 
 
 ### Diagnostics for fitted values
 
 # Leverage: can be defined as the rate of change in the fitted response 
 # with respect to the observed response
-leverage1 <- HLMdiag::leverage(modf, level = 1)
 leverage2 <- HLMdiag::leverage(modf, level = "Individual")
+leverage1 <- HLMdiag::leverage(modf, level = 1)
 
 head(leverage1)
 # overall: overall leverage
@@ -328,8 +396,8 @@ head(leverage1)
 # ranef.uc: the unconfounded random effects leverage (modified ranef)
 
 # Visualize influential elements
-HLMdiag::dotplot_diag(x = leverage1[ , "overall"], cutoff = "internal", name = "leverage", modify = "dotplot") + ylab("Overall leverage") + xlab("Value")
 HLMdiag::dotplot_diag(x = leverage2[ , "overall"], cutoff = "internal", name = "leverage", modify = "dotplot") + ylab("Overall leverage") + xlab("Individual")
+HLMdiag::dotplot_diag(x = leverage1[ , "overall"], cutoff = "internal", name = "leverage", modify = "dotplot") + ylab("Overall leverage") + xlab("Value")
 
 
 ###################
